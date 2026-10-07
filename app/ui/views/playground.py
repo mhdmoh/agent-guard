@@ -15,6 +15,7 @@ from app.ui.components.render import (
     render_run,
 )
 from app.ui.styles import inject_styles
+from app.utils.anonymous_id import ensure_anonymous_id
 from app.utils.client_ip import visitor_client_ip
 from app.utils.logging import setup_logging
 
@@ -43,6 +44,11 @@ def render_playground() -> None:
         st.stop()
 
     guard = get_guard()
+    # Mint/persist anonymous browser id early so reloads and tabs share one quota.
+    anonymous_id = ensure_anonymous_id(
+        cookie_max_age_seconds=settings.anonymous_id_cookie_max_age_seconds,
+        secure=settings.cookie_secure,
+    )
     home = st.session_state.get("page_home")
     render_playground_header(
         demo_mode=guard.demo_mode,
@@ -87,7 +93,11 @@ def render_playground() -> None:
         st.session_state.sync_request = request
         client_ip = visitor_client_ip(settings.trusted_proxy_cidrs)
         with st.spinner("Agent → Jev → Policy…"):
-            st.session_state.current_run = guard.run(request, client_ip=client_ip)
+            st.session_state.current_run = guard.run(
+                request,
+                client_ip=client_ip,
+                anonymous_id=anonymous_id,
+            )
         st.session_state.pending_human = None
         st.rerun()
 

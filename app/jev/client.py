@@ -49,10 +49,14 @@ class JevClient:
         *,
         run_id: str = "-",
         client_ip: str | None = None,
+        anonymous_id: str | None = None,
     ) -> dict[str, Any]:
         api_key = self._settings.require_jev_api_key()
         try:
-            self._rate_limiter.acquire(client_ip)
+            self._rate_limiter.acquire(
+                anonymous_id=anonymous_id,
+                client_ip=client_ip,
+            )
         except RateLimitExceeded as exc:
             raise JevClientError(str(exc), status_code=429) from exc
 

@@ -52,7 +52,13 @@ class AgentGuard:
     def registry(self) -> ToolRegistry:
         return self._registry
 
-    def run(self, user_request: str, *, client_ip: str | None = None) -> AgentRun:
+    def run(
+        self,
+        user_request: str,
+        *,
+        client_ip: str | None = None,
+        anonymous_id: str | None = None,
+    ) -> AgentRun:
         """Propose + evaluate + apply policy. Does not execute confirmation-gated tools."""
         run_id = uuid.uuid4().hex[:12]
         started = time.perf_counter()
@@ -60,10 +66,11 @@ class AgentGuard:
         run.events.append(event("agent", "request_received", request_preview=user_request[:120]))
 
         logger.info(
-            "run_started run_id=%s demo_mode=%s client_ip=%s",
+            "run_started run_id=%s demo_mode=%s client_ip=%s anon=%s",
             run_id,
             self.demo_mode,
             client_ip or "-",
+            (anonymous_id or "-")[:8],
         )
 
         try:
@@ -101,6 +108,7 @@ class AgentGuard:
                 meta,
                 run_id=run_id,
                 client_ip=client_ip,
+                anonymous_id=anonymous_id,
             )
         except JevClientError as exc:
             run.error = f"Jev evaluation failed: {exc}"

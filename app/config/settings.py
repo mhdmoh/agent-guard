@@ -45,14 +45,33 @@ class Settings(BaseSettings):
         alias="DEMO_WORKSPACE",
     )
 
-    # Outbound Jev API rate limit (live calls only; DEMO MODE is unrestricted)
-    # Budget is per visitor client IP (via trusted Nginx → Docker hop).
+    # Outbound Jev API rate limits (live calls only; DEMO MODE is unrestricted)
+    # Layer 1: per anonymous browser cookie. Layer 2: per public IP (abuse).
     rate_limit_enabled: bool = Field(default=True, alias="RATE_LIMIT_ENABLED")
-    rate_limit_max_calls: int = Field(default=3, alias="RATE_LIMIT_MAX_CALLS", ge=1)
-    rate_limit_window_hours: float = Field(
-        default=5.0,
-        alias="RATE_LIMIT_WINDOW_HOURS",
-        gt=0,
+    anonymous_rate_limit_requests: int = Field(
+        default=3,
+        alias="ANONYMOUS_RATE_LIMIT_REQUESTS",
+        ge=1,
+    )
+    anonymous_rate_limit_window_seconds: int = Field(
+        default=18_000,
+        alias="ANONYMOUS_RATE_LIMIT_WINDOW_SECONDS",
+        ge=1,
+    )
+    ip_rate_limit_requests: int = Field(
+        default=20,
+        alias="IP_RATE_LIMIT_REQUESTS",
+        ge=1,
+    )
+    ip_rate_limit_window_seconds: int = Field(
+        default=3_600,
+        alias="IP_RATE_LIMIT_WINDOW_SECONDS",
+        ge=1,
+    )
+    anonymous_id_cookie_max_age_seconds: int = Field(
+        default=60 * 60 * 24 * 365,
+        alias="ANONYMOUS_ID_COOKIE_MAX_AGE_SECONDS",
+        ge=60,
     )
     # Comma-separated CIDRs whose TCP peers may set X-Real-IP / X-Forwarded-For.
     # Defaults: loopback + Docker bridge (see app.utils.client_ip).
@@ -60,6 +79,11 @@ class Settings(BaseSettings):
         default="127.0.0.0/8,::1/128,172.16.0.0/12",
         alias="TRUSTED_PROXY_CIDRS",
     )
+
+    @property
+    def cookie_secure(self) -> bool:
+        """Use Secure cookies outside local development."""
+        return self.app_env.strip().lower() not in {"development", "dev", "local", "test"}
 
     @field_validator("demo_workspace", mode="before")
     @classmethod
