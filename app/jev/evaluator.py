@@ -67,6 +67,7 @@ class JevEvaluator:
         *,
         run_id: str = "-",
         force_demo: bool = False,
+        client_ip: str | None = None,
     ) -> JevDecision:
         if force_demo or not self._settings.jev_configured:
             with Timer() as timer:
@@ -84,7 +85,7 @@ class JevEvaluator:
 
         body = self._build_request(tool_call, tool_meta)
         with Timer() as timer:
-            payload = self._client.decide(body, run_id=run_id)
+            payload = self._client.decide(body, run_id=run_id, client_ip=client_ip)
         decision = parse_jev_decision(payload, default_model=self._settings.jev_model)
         decision.latency_ms = timer.elapsed_ms
         decision.demo_mode = False

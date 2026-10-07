@@ -1,4 +1,4 @@
-"""Tests for outbound Jev API rate limiting."""
+"""Tests for outbound Jev API rate limiting (per client IP)."""
 
 from __future__ import annotations
 
@@ -27,11 +27,12 @@ def test_rate_limiter_allows_up_to_max_then_blocks() -> None:
     limiter = JevRateLimiter(
         _settings(RATE_LIMIT_MAX_CALLS=3, RATE_LIMIT_WINDOW_HOURS=5)
     )
-    limiter.acquire()
-    limiter.acquire()
-    limiter.acquire()
+    ip = "203.0.113.10"
+    limiter.acquire(ip)
+    limiter.acquire(ip)
+    limiter.acquire(ip)
     with pytest.raises(RateLimitExceeded) as exc:
-        limiter.acquire()
+        limiter.acquire(ip)
     assert exc.value.max_calls == 3
     assert exc.value.window_hours == 5.0
 
@@ -39,16 +40,25 @@ def test_rate_limiter_allows_up_to_max_then_blocks() -> None:
 def test_rate_limiter_disabled_never_blocks() -> None:
     limiter = JevRateLimiter(_settings(RATE_LIMIT_ENABLED=False, RATE_LIMIT_MAX_CALLS=1))
     for _ in range(5):
-        limiter.acquire()
+        limiter.acquire("203.0.113.10")
 
 
-def test_different_api_keys_have_separate_buckets() -> None:
-    a = JevRateLimiter(_settings(JEV_API_KEY="key-a", RATE_LIMIT_MAX_CALLS=1))
-    b = JevRateLimiter(_settings(JEV_API_KEY="key-b", RATE_LIMIT_MAX_CALLS=1))
-    a.acquire()
+def test_different_ips_have_separate_buckets() -> None:
+    limiter = JevRateLimiter(_settings(RATE_LIMIT_MAX_CALLS=1))
+    limiter.acquire("203.0.113.10")
     with pytest.raises(RateLimitExceeded):
-        a.acquire()
-    b.acquire()  # other API identity still allowed
+        limiter.acquire("203.0.113.10")
+    limiter.acquire("203.0.113.11")  # independent quota
+
+
+def test_two_users_do_not_share_bucket() -> None:
+    limiter = JevRateLimiter(_settings(RATE_LIMIT_MAX_CALLS=3))
+    for _ in range(3):
+        limiter.acquire("198.51.100.1")
+    with pytest.raises(RateLimitExceeded):
+        limiter.acquire("198.51.100.1")
+    for _ in range(3):
+        limiter.acquire("198.51.100.2")
 
 
 def test_jev_client_decide_respects_rate_limit() -> None:
@@ -59,10 +69,10 @@ def test_jev_client_decide_respects_rate_limit() -> None:
     http = httpx.Client(transport=transport)
     client = JevClient(settings, client=http)
 
-    client.decide({"model": "x"})
-    client.decide({"model": "x"})
+    client.decide({"model": "x"}, client_ip="203.0.113.10")
+    client.decide({"model": "x"}, client_ip="203.0.113.10")
     with pytest.raises(JevClientError) as exc:
-        client.decide({"model": "x"})
+        client.decide({"model": "x"}, client_ip="203.0.113.10")
     assert exc.value.status_code == 429
     assert "rate limit" in str(exc.value).lower()
 
@@ -73,7 +83,7 @@ def test_jev_client_skips_http_when_rate_limited() -> None:
     mock_http.post.return_value = httpx.Response(200, json={"ok": True})
     client = JevClient(settings, client=mock_http)
 
-    client.decide({"model": "x"})
+    client.decide({"model": "x"}, client_ip="203.0.113.10")
     with pytest.raises(JevClientError):
-        client.decide({"model": "x"})
+        client.decide({"model": "x"}, client_ip="203.0.113.10")
     assert mock_http.post.call_count == 1

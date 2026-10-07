@@ -46,12 +46,19 @@ class Settings(BaseSettings):
     )
 
     # Outbound Jev API rate limit (live calls only; DEMO MODE is unrestricted)
+    # Budget is per visitor client IP (via trusted Nginx → Docker hop).
     rate_limit_enabled: bool = Field(default=True, alias="RATE_LIMIT_ENABLED")
     rate_limit_max_calls: int = Field(default=3, alias="RATE_LIMIT_MAX_CALLS", ge=1)
     rate_limit_window_hours: float = Field(
         default=5.0,
         alias="RATE_LIMIT_WINDOW_HOURS",
         gt=0,
+    )
+    # Comma-separated CIDRs whose TCP peers may set X-Real-IP / X-Forwarded-For.
+    # Defaults: loopback + Docker bridge (see app.utils.client_ip).
+    trusted_proxy_cidrs: str = Field(
+        default="127.0.0.0/8,::1/128,172.16.0.0/12",
+        alias="TRUSTED_PROXY_CIDRS",
     )
 
     @field_validator("demo_workspace", mode="before")

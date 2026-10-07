@@ -43,10 +43,16 @@ class JevClient:
             self._client = httpx.Client(timeout=self._settings.jev_timeout_seconds)
         return self._client
 
-    def decide(self, body: dict[str, Any], *, run_id: str = "-") -> dict[str, Any]:
+    def decide(
+        self,
+        body: dict[str, Any],
+        *,
+        run_id: str = "-",
+        client_ip: str | None = None,
+    ) -> dict[str, Any]:
         api_key = self._settings.require_jev_api_key()
         try:
-            self._rate_limiter.acquire()
+            self._rate_limiter.acquire(client_ip)
         except RateLimitExceeded as exc:
             raise JevClientError(str(exc), status_code=429) from exc
 

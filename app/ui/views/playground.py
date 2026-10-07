@@ -15,6 +15,7 @@ from app.ui.components.render import (
     render_run,
 )
 from app.ui.styles import inject_styles
+from app.utils.client_ip import visitor_client_ip
 from app.utils.logging import setup_logging
 
 
@@ -84,8 +85,9 @@ def render_playground() -> None:
     request, should_run = render_composer()
     if should_run and request:
         st.session_state.sync_request = request
+        client_ip = visitor_client_ip(settings.trusted_proxy_cidrs)
         with st.spinner("Agent → Jev → Policy…"):
-            st.session_state.current_run = guard.run(request)
+            st.session_state.current_run = guard.run(request, client_ip=client_ip)
         st.session_state.pending_human = None
         st.rerun()
 

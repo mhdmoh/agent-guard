@@ -191,11 +191,12 @@ Copy `.env.example` → `.env`. Notable variables:
 | `JEV_MODEL` | Default `jev-1.13.0` |
 | `AUTO_EXECUTE_*` / `CONFIRM_*` / `BLOCK_MIN_RISK` | Policy thresholds |
 | `RATE_LIMIT_ENABLED` | Limit live Jev calls (default `true`) |
-| `RATE_LIMIT_MAX_CALLS` | Max live decide calls per window (default `3`) |
+| `RATE_LIMIT_MAX_CALLS` | Max live decide calls per client IP per window (default `3`) |
 | `RATE_LIMIT_WINDOW_HOURS` | Window length in hours (default `5`) |
+| `TRUSTED_PROXY_CIDRS` | Peers allowed to set `X-Real-IP` / `X-Forwarded-For` |
 | `DEMO_WORKSPACE` | Sandbox root (`demo/workspace`) |
 
-Live Jev calls are rate-limited per API identity (base URL + API key) via [`pyrate-limiter`](https://pypi.org/project/pyrate-limiter/). DEMO MODE does not consume the budget. When exceeded, the playground surfaces a clear error (`HTTP 429` semantics) instead of calling Jev.
+Live Jev calls are rate-limited **per visitor client IP** (default 3 / 5 hours) via [`pyrate-limiter`](https://pypi.org/project/pyrate-limiter/). Behind Nginx, the app trusts `X-Real-IP` only when the TCP peer is a configured proxy (loopback / Docker bridge). DEMO MODE does not consume the budget. When exceeded, the playground surfaces a clear error (`HTTP 429` semantics) instead of calling Jev.
 
 Never commit `.env`. The UI never displays API keys.
 

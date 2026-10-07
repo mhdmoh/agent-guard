@@ -2,9 +2,16 @@
 
 from __future__ import annotations
 
-from hashlib import sha256
-
-from pyrate_limiter import Duration, Limiter, Rate
+from pyrate_limiter import (
+    AbstractBucket,
+    BucketFactory,
+    Duration,
+    InMemoryBucket,
+    Limiter,
+    Rate,
+    RateItem,
+    WallClock,
+)
 
 from app.config.settings import Settings
 from app.utils.logging import get_logger
@@ -21,26 +28,50 @@ class RateLimitExceeded(Exception):
         self.window_hours = window_hours
 
 
+class _PerKeyBucketFactory(BucketFactory):
+    """One in-memory bucket per acquire() name (client IP).
+
+    ``Limiter(Rate(...))`` uses SingleBucketFactory, which ignores the name and
+    shares one global bucket — unsuitable for per-visitor limits.
+    """
+
+    def __init__(self, rates: list[Rate]) -> None:
+        self._rates = rates
+        self._clock = WallClock()
+        self._buckets: dict[str, AbstractBucket] = {}
+
+    def wrap_item(self, name: str, weight: int = 1) -> RateItem:
+        return RateItem(name=name, timestamp=self._clock.now(), weight=weight)
+
+    def get(self, item: RateItem) -> AbstractBucket:
+        bucket = self._buckets.get(item.name)
+        if bucket is None:
+            bucket = self.create(InMemoryBucket, list(self._rates))
+            self._buckets[item.name] = bucket
+        return bucket
+
+
 class JevRateLimiter:
-    """Limits live Jev decide calls for a given API identity."""
+    """Limits live Jev decide calls per visitor client IP."""
 
     def __init__(self, settings: Settings) -> None:
         self._enabled = settings.rate_limit_enabled
         self._max_calls = settings.rate_limit_max_calls
         self._window_hours = settings.rate_limit_window_hours
-        self._bucket_key = _api_bucket_key(settings)
         window_ms = max(1, int(self._window_hours * Duration.HOUR))
-        self._limiter = Limiter(Rate(self._max_calls, window_ms))
+        rates = [Rate(self._max_calls, window_ms)]
+        self._limiter = Limiter(_PerKeyBucketFactory(rates))
 
-    def acquire(self) -> None:
-        """Consume one permit or raise RateLimitExceeded (non-blocking)."""
+    def acquire(self, client_ip: str | None = None) -> None:
+        """Consume one permit for ``client_ip`` or raise RateLimitExceeded."""
         if not self._enabled:
             return
-        acquired = self._limiter.try_acquire(self._bucket_key, blocking=False)
+        bucket_key = _ip_bucket_key(client_ip)
+        acquired = self._limiter.try_acquire(bucket_key, blocking=False)
         if not acquired:
             logger.warning(
                 "jev_rate_limited key=%s max=%s window_h=%s",
-                self._bucket_key,
+                bucket_key,
                 self._max_calls,
                 self._window_hours,
             )
@@ -53,8 +84,6 @@ class JevRateLimiter:
             )
 
 
-def _api_bucket_key(settings: Settings) -> str:
-    """Stable key for 'the same API' — base URL + API key fingerprint."""
-    key = settings.jev_api_key.strip() or "anonymous"
-    digest = sha256(key.encode("utf-8")).hexdigest()[:12]
-    return f"jev:{settings.jev_base_url}:{digest}"
+def _ip_bucket_key(client_ip: str | None) -> str:
+    ip = (client_ip or "").strip() or "unknown"
+    return f"jev:ip:{ip}"
