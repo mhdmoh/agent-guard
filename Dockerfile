@@ -5,7 +5,10 @@ FROM python:3.13-slim-bookworm AS builder
 
 COPY --from=ghcr.io/astral-sh/uv:0.9.22 /uv /uvx /bin/
 
-WORKDIR /build
+# Build the venv at /app/.venv so console-script shebangs match the runtime path.
+# (A /build/.venv copied to /app/.venv keeps #!/build/.venv/bin/python → exec fails
+# with "no such file or directory" even when streamlit is installed.)
+WORKDIR /app
 
 ENV UV_COMPILE_BYTECODE=1 \
     UV_LINK_MODE=copy \
@@ -26,7 +29,7 @@ RUN apt-get update \
 
 WORKDIR /app
 
-COPY --from=builder /build/.venv /app/.venv
+COPY --from=builder /app/.venv /app/.venv
 COPY app ./app
 COPY demo ./demo
 COPY .streamlit ./.streamlit
