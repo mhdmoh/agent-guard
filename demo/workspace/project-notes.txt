@@ -1,0 +1,3 @@
+AgentGuard demo notes
+=====================
+Sandbox for safe tool demos.

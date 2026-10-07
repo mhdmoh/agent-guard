@@ -1,0 +1,9 @@
+# Copy to scripts/deploy.config (gitignored) or export these before deploying.
+# Do not put secrets here — production secrets live on the server .env.
+
+PROJECT_NAME=agentguard
+SSH_HOST=mhdmoh-server
+DOMAIN=agentguard.example.com
+HOST_PORT=8510
+CONTAINER_PORT=8501
+SKIP_TESTS=0
